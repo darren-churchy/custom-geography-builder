@@ -31,14 +31,31 @@ LSOA_URL = (
 )
 
 
+def get_batch_size(service_url: str) -> int:
+    """Query service metadata to find the server's maxRecordCount."""
+    try:
+        resp = requests.get(f"{service_url}?f=json", timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        max_count = int(data.get("maxRecordCount", 1000))
+        batch = min(max_count, 1000)
+        print(f"  Service maxRecordCount={max_count}, using batch size={batch}")
+        return batch
+    except Exception as exc:
+        print(f"  Could not read service metadata ({exc}), defaulting to batch size=500")
+        return 500
+
+
 def fetch_features(service_url: str, fields: str) -> list:
+    batch_size = get_batch_size(service_url)
     query_url = f"{service_url}/query"
     params = {
         "where": "1=1",
         "outFields": fields,
+        "returnGeometry": "true",
         "outSR": "4326",
         "f": "geojson",
-        "resultRecordCount": 2000,
+        "resultRecordCount": batch_size,
         "resultOffset": 0,
     }
     features = []
