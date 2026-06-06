@@ -24,6 +24,13 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install requests
+      - run: npm install -g mapshaper
+      - name: Fetch boundary data
+        run: python scripts/fetch-boundaries-ci.py
       - run: npm run build
       - uses: actions/upload-pages-artifact@v3
         with:

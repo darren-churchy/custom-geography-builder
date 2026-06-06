@@ -6,12 +6,14 @@ import { ExportButton } from "./components/ExportButton";
 import { useSelections } from "./hooks/useSelections";
 import "./index.css";
 
-// Update these constants once the boundary data files are in place.
-const OBJECT_NAME = "oa";      // key in topology.objects
-const CODE_PROP   = "OA21CD";  // property holding the building-block code
+// Boundary configuration — matches what fetch-boundaries-ci.py produces.
+// To switch to OA granularity, run scripts/fetch-boundaries.py locally and
+// update these to: OBJECT_NAME="oa", CODE_PROP/CODE_COL="OA21CD".
+const OBJECT_NAME = "lsoa";
+const CODE_PROP   = "LSOA21CD";
 const VINTAGE_YEAR = 2021;
 const LAYER_NAME  = "custom_regions";
-const CODE_COL    = "OA21CD";
+const CODE_COL    = "LSOA21CD";
 
 export default function App() {
   const [topology, setTopology] = useState<Topology | null>(null);
@@ -21,7 +23,7 @@ export default function App() {
 
   // Fetch generalised display topology (lazy — not bundled into JS).
   useEffect(() => {
-    fetch(`${import.meta.env.BASE_URL}data/gb-oa-generalised.topojson`)
+    fetch(`${import.meta.env.BASE_URL}data/boundaries.topojson`)
       .then((r) =>
         r.ok ? (r.json() as Promise<Topology>) : Promise.reject(r.status)
       )
