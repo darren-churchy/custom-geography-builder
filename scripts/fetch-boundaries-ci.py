@@ -49,11 +49,12 @@ def get_batch_size(service_url: str) -> int:
 def fetch_features(service_url: str, fields: str) -> list:
     batch_size = get_batch_size(service_url)
     query_url = f"{service_url}/query"
+    # Note: outSR is intentionally omitted — when f=geojson, ArcGIS returns
+    # WGS84 automatically and some services return 400 if outSR is also set.
     params = {
         "where": "1=1",
         "outFields": fields,
         "returnGeometry": "true",
-        "outSR": "4326",
         "f": "geojson",
         "resultRecordCount": batch_size,
         "resultOffset": 0,
@@ -61,7 +62,10 @@ def fetch_features(service_url: str, fields: str) -> list:
     features = []
     while True:
         resp = requests.get(query_url, params=params, timeout=120)
-        resp.raise_for_status()
+        if not resp.ok:
+            print(f"\n  HTTP {resp.status_code} from {resp.url}")
+            print(f"  Response body: {resp.text[:500]}")
+            resp.raise_for_status()
         data = resp.json()
         batch = data.get("features", [])
         features.extend(batch)
