@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { feature } from "topojson-client";
@@ -45,6 +45,7 @@ export function BoundaryMap({
 }: BoundaryMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const [mapReady, setMapReady] = useState(false);
 
   // Keep a stable ref to the latest click handler to avoid stale closures.
   const onClickRef = useRef(onBlockClick);
@@ -76,50 +77,47 @@ export function BoundaryMap({
     });
 
     mapRef.current = map;
+    map.once("load", () => setMapReady(true));
+
     return () => {
       map.remove();
       mapRef.current = null;
+      setMapReady(false);
     };
   }, []);
 
-  // Add building-block source + layers when topology becomes available.
+  // Add building-block source + layers once both the map and topology are ready.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !topology) return;
+    if (!map || !mapReady || !topology) return;
+    if (map.getSource("blocks")) return; // already added
 
     const geojson = feature(
       topology,
       topology.objects[objectName] as GeometryCollection
     ) as unknown as FeatureCollection;
 
-    const setup = () => {
-      if (map.getSource("blocks")) return; // already added
-
-      map.addSource("blocks", { type: "geojson", data: geojson });
-      map.addLayer({
-        id: "blocks-fill",
-        type: "fill",
-        source: "blocks",
-        paint: { "fill-color": "#ccc", "fill-opacity": 0.35 },
-      });
-      map.addLayer({
-        id: "blocks-outline",
-        type: "line",
-        source: "blocks",
-        paint: { "line-color": "#888", "line-width": 0.4, "line-opacity": 0.6 },
-      });
-      map.getCanvas().style.cursor = "pointer";
-      map.on("click", "blocks-fill", (e) => {
-        const code = e.features?.[0]?.properties?.[codeProp] as
-          | string
-          | undefined;
-        if (code) onClickRef.current(code);
-      });
-    };
-
-    if (map.isStyleLoaded()) setup();
-    else map.once("load", setup);
-  }, [topology, objectName, codeProp]);
+    map.addSource("blocks", { type: "geojson", data: geojson });
+    map.addLayer({
+      id: "blocks-fill",
+      type: "fill",
+      source: "blocks",
+      paint: { "fill-color": "#ccc", "fill-opacity": 0.35 },
+    });
+    map.addLayer({
+      id: "blocks-outline",
+      type: "line",
+      source: "blocks",
+      paint: { "line-color": "#888", "line-width": 0.4, "line-opacity": 0.6 },
+    });
+    map.getCanvas().style.cursor = "pointer";
+    map.on("click", "blocks-fill", (e) => {
+      const code = e.features?.[0]?.properties?.[codeProp] as
+        | string
+        | undefined;
+      if (code) onClickRef.current(code);
+    });
+  }, [topology, objectName, codeProp, mapReady]);
 
   // Repaint fill colours whenever the mapping changes.
   useEffect(() => {
