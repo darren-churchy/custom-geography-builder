@@ -30,56 +30,76 @@ LSOA_URL = (
     "/Lower_layer_Super_Output_Areas_Dec_2021_Boundaries_EW_BGC_V2/FeatureServer/0"
 )
 
+HEADERS = {
+    "User-Agent": (
+        "custom-geography-builder/1.0 "
+        "(github.com/darren-churchy/custom-geography-builder)"
+    )
+}
 
-def get_batch_size(service_url: str) -> int:
-    """Query service metadata to find the server's maxRecordCount."""
-    try:
-        resp = requests.get(f"{service_url}?f=json", timeout=30)
+
+def get_service_info(service_url: str) -> dict:
+    resp = requests.get(f"{service_url}?f=json", headers=HEADERS, timeout=30)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def fetch_all_ids(service_url: str) -> list:
+    """Get every objectId in one lightweight query — no geometry, no pagination."""
+    resp = requests.get(
+        f"{service_url}/query",
+        headers=HEADERS,
+        params={"where": "1=1", "returnIdsOnly": "true", "f": "json"},
+        timeout=60,
+    )
+    if not resp.ok:
+        print(f"  returnIdsOnly failed: HTTP {resp.status_code}")
+        print(f"  {resp.text[:400]}")
         resp.raise_for_status()
-        data = resp.json()
-        max_count = int(data.get("maxRecordCount", 1000))
-        batch = min(max_count, 1000)
-        print(f"  Service maxRecordCount={max_count}, using batch size={batch}")
-        return batch
-    except Exception as exc:
-        print(f"  Could not read service metadata ({exc}), defaulting to batch size=500")
-        return 500
+    return resp.json().get("objectIds", [])
 
 
-def fetch_features(service_url: str, fields: str) -> list:
-    batch_size = get_batch_size(service_url)
-    query_url = f"{service_url}/query"
-    # Note: outSR is intentionally omitted — when f=geojson, ArcGIS returns
-    # WGS84 automatically and some services return 400 if outSR is also set.
-    params = {
-        "where": "1=1",
-        "outFields": fields,
-        "returnGeometry": "true",
-        "f": "geojson",
-        "resultRecordCount": batch_size,
-        "resultOffset": 0,
-    }
+def fetch_by_ids(service_url: str, ids: list, fields: str, batch_size: int) -> list:
+    """
+    Fetch features in batches keyed by objectId.
+    Avoids resultOffset/resultRecordCount pagination which some ArcGIS
+    service versions reject.
+    """
     features = []
-    while True:
-        resp = requests.get(query_url, params=params, timeout=120)
+    total = len(ids)
+    for i in range(0, total, batch_size):
+        batch = ids[i : i + batch_size]
+        params = {
+            "objectIds": ",".join(str(x) for x in batch),
+            "outFields": fields,
+            "returnGeometry": "true",
+            "f": "geojson",
+        }
+        resp = requests.get(
+            f"{service_url}/query", headers=HEADERS, params=params, timeout=120
+        )
         if not resp.ok:
-            print(f"\n  HTTP {resp.status_code} from {resp.url}")
-            print(f"  Response body: {resp.text[:500]}")
+            print(f"\n  HTTP {resp.status_code} on batch {i}–{i + len(batch)}")
+            print(f"  {resp.text[:400]}")
             resp.raise_for_status()
-        data = resp.json()
-        batch = data.get("features", [])
-        features.extend(batch)
-        print(f"  …{len(features)} features fetched", end="\r", flush=True)
-        if not data.get("exceededTransferLimit", False):
-            break
-        params["resultOffset"] += len(batch)
-    print(f"  {len(features)} total")
+        features.extend(resp.json().get("features", []))
+        print(f"  …{len(features)}/{total} features", end="\r", flush=True)
+    print(f"  {total} features fetched          ")
     return features
 
 
 def main():
-    print("Fetching LSOA 2021 boundaries (England & Wales)…")
-    features = fetch_features(LSOA_URL, "LSOA21CD")
+    print("Querying LSOA 2021 service metadata…")
+    info = get_service_info(LSOA_URL)
+    batch_size = min(int(info.get("maxRecordCount", 1000)), 1000)
+    print(f"  maxRecordCount={info.get('maxRecordCount')}, using batch size={batch_size}")
+
+    print("Fetching all object IDs…")
+    ids = fetch_all_ids(LSOA_URL)
+    print(f"  {len(ids)} object IDs found")
+
+    print("Fetching feature geometries in batches by objectId…")
+    features = fetch_by_ids(LSOA_URL, ids, "LSOA21CD", batch_size)
 
     fc = {"type": "FeatureCollection", "features": features}
     TMP_GEOJSON.write_text(json.dumps(fc))
