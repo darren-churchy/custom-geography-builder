@@ -38,6 +38,7 @@ CANDIDATE_URLS = [
     f"{ONS_BASE}/Lower_layer_Super_Output_Areas_Dec_2021_Boundaries_EW_BGC_V3/FeatureServer/0",
     f"{ONS_BASE}/Lower_layer_Super_Output_Areas_Dec_2021_Boundaries_EW_BGC_V2/FeatureServer/0",
     f"{ONS_BASE}/Lower_layer_Super_Output_Areas_December_2021_Boundaries_EW_BGC_V3/FeatureServer/0",
+    f"{ONS_BASE}/Lower_layer_Super_Output_Areas_December_2021_Boundaries_EW_BGC_V5/FeatureServer/0",
 ]
 
 # England & Wales has ~35,000 LSOAs. Fail loudly if we get fewer than this.
