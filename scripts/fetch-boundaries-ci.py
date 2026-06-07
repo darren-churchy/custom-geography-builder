@@ -152,12 +152,14 @@ def fetch_all_ids(service_url: str) -> list:
 def fetch_by_ids(service_url: str, ids: list, fields: str, batch_size: int) -> list:
     features = []
     total = len(ids)
+    # POST avoids URL length limits when objectIds list is large (1000 IDs ≈ 6 KB URL).
+    post_headers = {**HEADERS, "Content-Type": "application/x-www-form-urlencoded"}
     for i in range(0, total, batch_size):
         batch = ids[i : i + batch_size]
-        resp = requests.get(
+        resp = requests.post(
             f"{service_url}/query",
-            headers=HEADERS,
-            params={
+            headers=post_headers,
+            data={
                 "objectIds": ",".join(str(x) for x in batch),
                 "outFields": fields,
                 "returnGeometry": "true",
